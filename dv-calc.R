@@ -3,6 +3,7 @@ library(ggplot2)
 library(gtools)
 library(lattice)
 library(latticeExtra)
+library(RColorBrewer)
 
 rm(list=ls())
 
@@ -35,13 +36,14 @@ setkey(edt,name)
 edt[is.na(g), g := kg]
 
 engs <- edt[,name]
-# engs <- engs[1]
+#engs <- engs[1]
 # engs <- c('xenon')
-# eng.name <- engs[1]
+#eng.name <- engs[1]
 
 # desired iso-csr curves, with highlighting of the 1:2 ratio
 csr.levels <- c(1/10, 1/5, 1/4, 1/3, 1/2, 1, 1.5, 2)
 csr.levels <- c(csr.levels, rep(1/2,4))
+twr.levels <- seq(1,2.4,0.2)
 
 # start the reactor
 # free mars
@@ -110,18 +112,94 @@ res <- lapply(engs, function (eng.name) {
         twdt[, linelab := ifelse(topm %% xbreak == 0, as.character(round(twr,2)), '')]
         twdt[, linelab := ifelse(topm %% xbreak == 0, as.character(round(cargo.stage.ratio,2)), '')]
 
-        # cargo/stage weight ratio contour
-#         csrdt <- as.data.table(expand.grid(topm=seq(0,topm.max, xbreak / 10), dv=seq(0,dv.max, ybreak/10)))
-#         csrdt[, Ka := exp(dv / (kg*eng$ispa))]
-#         csrdt[, Kv := exp(dv / (kg*eng$ispv))]
-#         csrdt[, na := ((eng$eng.mass + topm)*(Ka-1))/(eng$mf - Ka*eng$me)]
-#         csrdt[, csra := topm/(eng$eng.mass + na * eng$mf)]
-#         csrdt[, nv := ((eng$eng.mass + topm)*(Kv-1))/(eng$mf - Ka*eng$me)]
-#         csrdt[, csrv := topm/(eng$eng.mass + nv * eng$mf)]
-#         csrdt[csra < 0, csra := 0]
-#         csrdt[csrv < 0, csrv := 0]
+        # make isoquants - fun math
+        # one version for atmosphere, one for vacuum
+        isodt <- CJ(topm=seq(0,topm.max,xbreak/25),
+                    dv=seq(0,dv.max,ybreak/25))
+        isodt[, Ka := exp(dv / (kg * eng$ispa))]
+        isodt[, Kv := exp(dv / (kg * eng$ispv))]
+        isodt[, na := ((topm + eng$eng.mass)*(Ka-1))/(eng$mf - Ka*eng$me)]
+        isodt[, nv := ((topm + eng$eng.mass)*(Kv-1))/(eng$mf - Kv*eng$me)]
 
-        #plotatm <- xyplot(dv ~ topm, data=twdt, groups=ntanks, type='l')
+        # csr isoquants
+        isodt[, csra := topm / (eng$eng.mass + na*eng$mf)]
+        isodt[, csrv := topm / (eng$eng.mass + nv*eng$mf)]
+
+        # twr isoquants
+        # TODO: fix to account for TWR of relevant bodies
+        isodt[, twra := (eng$thr * (eng$ispa/eng$ispv)) / (kg*(topm + eng$eng.mass + na*eng$mf))]
+        isodt[, twrv := eng$thr / (kg*(topm + eng$eng.mass + na*eng$mf))]
+
+
+        # set palettes and legends
+        ncolor <- (eng$tank.max / eng$tank.gap) - (eng$tank.min / eng$tank.gap) + 1
+        palbase <- colorRampPalette(brewer.pal(9,'Blues'))(2 * ncolor)
+        palfunc <- function(x) palbase[ncolor + x/eng$tank.gap]
+        twrpal <- brewer.pal(length(twr.levels),'YlGn')
+        tankkey <- list(text=list(as.character(seq(eng$tank.min,eng$tank.max,eng$tank.gap))),
+                      lines=list(col=palbase[1:ncolor + ncolor],lwd=4),
+                      space='right',title=paste0('Tanks (',eng$mf,')'),
+                      cex.title=1.4)
+        twrkey <- list(col=twrpal,at=twr.levels,
+                       space='top')
+        plotleg <- list(right=c(fun=draw.key(tankkey)),
+                        top=c(fun=draw.colorkey(twrkey)))
+        plotleg <- list(right=c(fun=draw.key(tankkey)))
+        plotleg <- list(right=list(fun=draw.key,args=list(key=tankkey)),
+                        top=list(fun=draw.colorkey,args=list(key=twrkey)))
+
+        # lattice plots
+        # start by plotting dv-lines per stage mass
+        plotatm <- xyplot(dv ~ topm, data=twdt[env=='ispa'],
+                          groups=ntanks, col=palfunc(twdt[env=='ispa',ntanks]),
+                          type='l', lwd=4)
+        plotvac <- xyplot(dv ~ topm, data=twdt[env=='ispv'],
+                          groups=ntanks, col=palfunc(twdt[env=='ispv',ntanks]),
+                          type='l', lwd=4)
+        # add csr labels to lines
+        plotatm <- plotatm + layer(panel.text(topm,dv,labels=linelab,pos=3),
+                                   data=twdt[env=='ispa'])
+        plotvac <- plotvac + layer(panel.text(topm,dv,labels=linelab,pos=3),
+                                   data=twdt[env=='ispv'])
+        # add isoquants
+        csratm <- contourplot(csra~topm*dv,data=isodt,
+                    at=csr.levels,labels=FALSE,lwd=2,
+                    col=brewer.pal(3,'Accent')[2],
+                    colorkey=FALSE)
+        csrvac <- contourplot(csrv~topm*dv,data=isodt,
+                    at=csr.levels,labels=FALSE,lwd=2,
+                    col=brewer.pal(3,'Accent')[2],
+                    colorkey=FALSE)
+        twratm <- levelplot(twra~topm*dv,data=isodt,
+                    at=twr.levels,col.regions=twrpal,alpha.regions=0.5,
+                    contour=TRUE,
+                    colorkey=FALSE)
+        twrvac <- levelplot(twrv~topm*dv,data=isodt,
+                    at=twr.levels,col.regions=twrpal,alpha.regions=0.5,
+                    contour=TRUE,
+                    colorkey=FALSE)
+        plotatm <- twratm + as.layer(csratm) + as.layer(plotatm)
+        plotvac <- twrvac + as.layer(csrvac) + as.layer(plotvac)
+        #plotatm <- plotatm + as.layer(csratm)
+
+        # add key
+        #plotatm <- update(plotatm,key=tankkey)
+        #plotatm <- update(plotatm,key=twrkey)
+        plotatm <- update(plotatm,legend=plotleg,
+                          main=paste0(eng$name,
+                              ' atm (thr:mass ', round(eng$thr * eng$ispa/eng$ispv), ' : ', eng$eng.mass,
+                              ', isp ', eng$ispa, ', ',  round(eng$g/kg,2), ' g)'),
+                          scales=list(x=list(at=seq(0,topm.max,xbreak)),
+                                      y=list(at=seq(0,ymax,ybreak))))
+        plotvac <- update(plotvac,legend=plotleg,
+                          main=paste0(eng$name,
+                              ' vac (thr:mass ', eng$thr, ' : ', eng$eng.mass,
+                              ', isp ', eng$ispv, ', ',  round(eng$g/kg,2), ' g)'),
+                          scales=list(x=list(at=seq(0,topm.max,xbreak)),
+                                      y=list(at=seq(0,ymax,ybreak))))
+#         plotatm <- contourplot(csra~topm*dv,data=isodt) + as.layer(plotatm)
+
+
 
         ggp.wrap <- defmacro(ggp.base, csr.levels, expr={
                 ggp.base +
@@ -176,13 +254,22 @@ res <- lapply(engs, function (eng.name) {
         ggpv
 
         png(paste0('dvplots/', eng$name, '-atm.png'), width=800, height=600)
-        #print(plotatm)
         print(ggpa)
         dev.off()
 
         png(paste0('dvplots/', eng$name, '-vac.png'), width=800, height=600)
         print(ggpv)
         dev.off()
+
+        png(paste0('dvplots2/', eng$name, '-atm.png'), width=800, height=600)
+        print(plotatm)
+        dev.off()
+
+        png(paste0('dvplots2/', eng$name, '-vac.png'), width=800, height=600)
+        print(plotvac)
+        dev.off()
+
+
 
         res <- list()
         res$name <- eng.name
