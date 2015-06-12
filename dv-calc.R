@@ -1,6 +1,6 @@
 library(data.table)
 library(ggplot2)
-#library(gtools)
+library(gtools)
 library(lattice)
 library(latticeExtra)
 
@@ -37,7 +37,7 @@ edt[is.na(g), g := kg]
 engs <- edt[,name]
 # engs <- engs[1]
 # engs <- c('xenon')
-eng.name <- engs[1]
+# eng.name <- engs[1]
 
 # desired iso-csr curves, with highlighting of the 1:2 ratio
 csr.levels <- c(1/10, 1/5, 1/4, 1/3, 1/2, 1, 1.5, 2)
@@ -62,13 +62,13 @@ res <- lapply(engs, function (eng.name) {
         dva.twr <- function(x, twr) { 
                 ntanks.twr <- iso.twr(x, g=eng$g, eng.thr=eng$thr, eng.mass=eng$eng.mass,
                     full.mass=eng$mf, twr=twr)
-                dv.calc(x, isp=eng$ispa, g=eng$g, eng.mass=eng$eng.mass, ntanks=ntanks.twr1,
+                dv.calc(x, isp=eng$ispa, g=eng$g, eng.mass=eng$eng.mass, ntanks=ntanks.twr,
                     full.mass=eng$mf, empty.mass=eng$me)
             }
         dvv.twr <- function(x, twr) { 
                 ntanks.twr <- iso.twr(x, g=eng$g, eng.thr=eng$thr, eng.mass=eng$eng.mass,
                     full.mass=eng$mf, twr=twr)
-                dv.calc(x, isp=eng$ispv, g=eng$g, eng.mass=eng$eng.mass, ntanks=ntanks.twr1,
+                dv.calc(x, isp=eng$ispv, g=eng$g, eng.mass=eng$eng.mass, ntanks=ntanks.twr,
                     full.mass=eng$mf, empty.mass=eng$me)
             }
         dva.csr <- function(x, csr) {
@@ -81,6 +81,8 @@ res <- lapply(engs, function (eng.name) {
                 dv.calc(x, isp=eng$ispv, g=eng$g, eng.mass=eng$eng.mass, ntanks=ntanks.csr,
                     full.mass=eng$mf, empty.mass=eng$me)
             }
+        dva.twr1 <- function(x) dva.twr(x,1)
+        dvv.twr1 <- function(x) dvv.twr(x,1)
 
         # topweight graphs
         twdt <- as.data.table(expand.grid(ntanks=tank.seq,
