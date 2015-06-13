@@ -44,6 +44,7 @@ engs <- edt[,name]
 csr.levels <- c(1/10, 1/5, 1/4, 1/3, 1/2, 1, 1.5, 2)
 csr.levels <- c(csr.levels, rep(1/2,4))
 twr.levels <- seq(1,2.4,0.2)
+twr.levels <- c(1,1.2,1.5,2,2.5,3,4,5)
 
 # start the reactor
 # free mars
@@ -127,9 +128,20 @@ res <- lapply(engs, function (eng.name) {
 
         # twr isoquants
         # TODO: fix to account for TWR of relevant bodies
-        isodt[, twra := (eng$thr * (eng$ispa/eng$ispv)) / (kg*(topm + eng$eng.mass + na*eng$mf))]
-        isodt[, twrv := eng$thr / (kg*(topm + eng$eng.mass + na*eng$mf))]
+        # TODO: something is still wrong here, we appear to be off by a factor of something
+        #isodt[, twra := (eng$thr * (eng$ispa/eng$ispv)) / (kg*(topm + eng$eng.mass + na*eng$mf))]
+        #isodt[, twrv := eng$thr / (kg*(topm + eng$eng.mass + nv*eng$mf))]
+        isodt[, twra := (eng$thr * (eng$ispa/eng$ispv)) / (eng$g*(topm + eng$eng.mass + na*eng$mf))]
+        isodt[, twrv := eng$thr / (eng$g*(topm + eng$eng.mass + nv*eng$mf))]
 
+        #print(eng$g)
+        #print(eng$mf)
+        #print(isodt[topm==0 & (dv %% ybreak == 0)])
+
+
+        ############################################################
+        # lattice plots
+        ############################################################
 
         # set palettes and legends
         ncolor <- (eng$tank.max / eng$tank.gap) - (eng$tank.min / eng$tank.gap) + 1
@@ -148,7 +160,6 @@ res <- lapply(engs, function (eng.name) {
         plotleg <- list(right=list(fun=draw.key,args=list(key=tankkey)),
                         top=list(fun=draw.colorkey,args=list(key=twrkey)))
 
-        # lattice plots
         # start by plotting dv-lines per stage mass
         plotatm <- xyplot(dv ~ topm, data=twdt[env=='ispa'],
                           groups=ntanks, col=palfunc(twdt[env=='ispa',ntanks]),
@@ -200,6 +211,9 @@ res <- lapply(engs, function (eng.name) {
 #         plotatm <- contourplot(csra~topm*dv,data=isodt) + as.layer(plotatm)
 
 
+        ############################################################
+        # ggplots
+        ############################################################
 
         ggp.wrap <- defmacro(ggp.base, csr.levels, expr={
                 ggp.base +
